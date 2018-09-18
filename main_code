@@ -1,0 +1,118 @@
+% Yohannes Azeze
+%11/14/2017
+%HW8
+
+clear all;
+clc;
+
+X1 = rand(1,100);
+X2 = rand(1,100);
+Y =[X1;X2];
+d = zeros(1,100);
+A= zeros(1,2);
+epsilon = 1.0000e-06;
+C_1=[];
+C_2=[];
+k=0;
+j=0;
+
+%Creating the 2 classes
+for i=1:100
+    A = Y(:,i);
+    V=(0.2*sin(10*A(1))+0.3);
+    U =((A(2)-0.8)^2+(A(1)-0.5)^2);
+    if A(2) <=V || U<0.0225
+        j =j+1;
+        d(i)= 1;
+        C_1(j,:)=A;
+    else
+        k=k+1;
+       d(i)= -1;
+       C_2(k,:)=A;
+    end    
+end
+
+scatter(C_1(1,:),C_1(2,:),'*');hold on;scatter(C_2(1,:),C_2(2,:),'o');
+title('Original data'); 
+
+%Construct the Kernel Matrix
+Ker = zeros(100,100);
+Ker_X1=zeros(100,3);
+Ker_X2 =zeros(100,3);
+for i=1:100
+    Ker_X1(i,:) = [X1(i)^2 sqrt(2)*X1(i)*X2(i) X2(i)^2];
+    for j=1:100
+        Ker_X2(j,:) = [X1(j)^2 sqrt(2)*X1(j)*X2(j) X2(j)^2];
+        Ker(i,j) = Ker_X1(i,:)*Ker_X2(j,:)';
+    end  
+end
+
+%Calculate Alpha using quadprog
+D = [[d];zeros(99,100)];
+b = zeros(100,1);
+f = -ones(100,1);
+a= zeros(100,1);
+A_I=[];
+B_I =[];
+Ib =zeros(100,1);
+Ub =[];
+Alpha = quadprog(Ker,f,A_I,B_I,D,b,Ib,Ub);
+
+%Calculate W
+%Find the support vectors
+Indx = find(Alpha>epsilon);
+W=zeros(1,3);
+Wo=0;
+Xj=[];
+
+%Calculate Optimized Weight and Bias
+for j=1:100
+        Ker_X2(j,:) = [X1(j)^2 sqrt(2)*X1(j)*X2(j) X2(j)^2];
+    for i=1:size(Indx)
+        Xj(i,:) = [X1(Indx(i))^2 sqrt(2)*X1(Indx(i))*X2(Indx(i)) X2(Indx(i))^2];
+        w =Alpha(i)*d(i)*Xj(i,:);
+        W =W+w;
+        wo = d(i)-(Alpha(j)*d(j)*(Xj(i,:)*Ker_X2(j,:)'));
+    end 
+    Wo = Wo+wo;    
+end
+
+%Calculate g(x)
+G =zeros(1,100);
+g=0;
+for j=1:size(Y,2)
+   for i=1:length(Indx)
+        g_in= Wo+(Alpha(i)*d(i)*Xj(i,:)*Ker_X2(j,:)');
+        g= g_in+g;
+    end
+    G(j)= g;
+    g=0;
+end
+Ho=[];
+H1=[];
+H_1=[];
+for i = 1 : size(Y,2)
+        if G(i)<0
+           H_1(i) = G(i);
+        elseif G(i)< epsilon && G(i)>0
+            Ho(i) = G(i);
+        else
+            H1(i)=G(i); 
+        end
+end
+
+scatter(C_1(:,1),C_1(:,2),'*');hold on;scatter(C_2(:,1),C_2(:,2),'o');
+%hold on;scatter(0:0.01:0.99,G);
+title('Original data');
+
+Y1=Y1';
+Y2=Y2';
+G=G';
+F = TriScatteredInterp(Y1,Y2,G);
+
+t = 0:.01:0.99; % sample uniformly the surface for matrices (qx, qy, qz)
+[qx, qy] = meshgrid(t, t); 
+qz = F(qx, qy);
+
+contour(qx, qy, qz); hold on; 
+plot(Y1,Y2,'bo'); hold off
